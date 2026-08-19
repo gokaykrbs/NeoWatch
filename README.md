@@ -125,8 +125,6 @@ NeoWatch_Code/
 ├── .env.example               # Template for NASA API credentials
 ├── .gitignore                 # Excludes .env, large CSVs, and model binaries
 ├── requirements.txt           # Pinned production dependencies
-├── ARCHITECTURE.md            # In-depth architectural blueprint
-├── PROJECT_BRAIN.md           # Progress tracking, checklists, and ADR log
 ├── app.py                     # Streamlit web serving dashboard
 │
 ├── data/                      # Dataset repository (git-ignored)
