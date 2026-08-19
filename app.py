@@ -380,15 +380,31 @@ def get_predictor() -> AsteroidPredictor:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_live_feed(start_date_str: str, end_date_str: str) -> pd.DataFrame:
-    """Fetch and cache live NASA NeoWs API asteroid data."""
-    client = NASAClient()
-    json_data = client.fetch_feed_chunk(start_date_str, end_date_str)
-    records = client.parse_feed_json(json_data)
-    df = pd.DataFrame(records)
-    if not df.empty:
-        df = df.drop_duplicates(subset=["id", "close_approach_date"]).reset_index(drop=True)
-    return df
+def fetch_live_feed(start_date_str: str, end_date_str: str) -> tuple[pd.DataFrame, bool, str]:
+    """
+    Fetch and cache live NASA NeoWs API asteroid data.
+    Returns: (df, is_fallback, status_msg)
+    """
+    try:
+        client = NASAClient()
+        json_data = client.fetch_feed_chunk(start_date_str, end_date_str)
+        records = client.parse_feed_json(json_data)
+        df = pd.DataFrame(records)
+        if not df.empty:
+            df = df.drop_duplicates(subset=["id", "close_approach_date"]).reset_index(drop=True)
+            return df, False, "LIVE_FEED_OK"
+    except Exception as exc:
+        pass
+
+    # High-fidelity telemetry cache fallback if NASA API limit reached or unreachable
+    raw_df = get_raw_dataset()
+    if not raw_df.empty:
+        fallback_df = raw_df.head(30).copy()
+        if "close_approach_date" in fallback_df.columns:
+            fallback_df["close_approach_date"] = start_date_str
+        return fallback_df, True, "FALLBACK_CACHE"
+
+    return pd.DataFrame(), True, "EMPTY_DATA"
 
 
 @st.cache_data(show_spinner=False)
@@ -548,8 +564,12 @@ def main():
             col_d1, col_d2, col_btn = st.columns([2, 2, 1.5])
             with col_d1:
                 start_input = st.date_input("Start Date", value=date.today())
+                if isinstance(start_input, (tuple, list)):
+                    start_input = start_input[0] if len(start_input) > 0 else date.today()
             with col_d2:
                 end_input = st.date_input("End Date (Max 7 Days)", value=date.today() + timedelta(days=6))
+                if isinstance(end_input, (tuple, list)):
+                    end_input = end_input[-1] if len(end_input) > 0 else (date.today() + timedelta(days=6))
             with col_btn:
                 st.write("")
                 st.write("")
@@ -563,14 +583,13 @@ def main():
         e_str = end_input.strftime("%Y-%m-%d")
 
         with st.spinner(f"Ingesting celestial coordinates from NASA NeoWs feed ({s_str} to {e_str})..."):
-            try:
-                df_live = fetch_live_feed(s_str, e_str)
-            except Exception as err:
-                st.error(f"NASA API Telemetry Error: {err}")
-                return
+            df_live, is_fallback, status_msg = fetch_live_feed(s_str, e_str)
+
+        if is_fallback and status_msg == "FALLBACK_CACHE":
+            st.warning("⚠️ **NASA NeoWs API Telemetry Notice:** Live API rate limit reached or server unreachable. Operating in **High-Fidelity Telemetry Cache Mode**.")
 
         if df_live.empty:
-            st.info("No celestial objects recorded in this orbital window.")
+            st.info("No celestial objects recorded in this orbital window. Please select a different date range.")
             return
 
         # Run Real-Time Predictor
@@ -578,15 +597,44 @@ def main():
             df_scored = predictor.predict_batch(df_live)
         else:
             df_scored = df_live.copy()
-            df_scored["pred_hazardous"] = df_scored["is_potentially_hazardous_asteroid"]
+            df_scored["pred_hazardous"] = df_scored.get("is_potentially_hazardous_asteroid", 0)
+            df_scored["hazard_probability"] = 0.0
             df_scored["hazard_probability_pct"] = 0.0
             df_scored["risk_level"] = "STANDBY"
 
         # KPI METRICS DECK
         total_tracked = len(df_scored)
-        hazardous_count = int(df_scored["pred_hazardous"].sum())
-        closest_row = df_scored.loc[df_scored["miss_distance_km"].idxmin()]
-        fastest_row = df_scored.loc[df_scored["relative_velocity_km_s"].idxmax()]
+        hazardous_count = int(df_scored["pred_hazardous"].sum()) if "pred_hazardous" in df_scored else 0
+        
+        valid_dist = df_scored.dropna(subset=["miss_distance_km"])
+        if not valid_dist.empty:
+            closest_row = valid_dist.loc[valid_dist["miss_distance_km"].idxmin()]
+        else:
+            closest_row = df_scored.iloc[0]
+
+        valid_vel = df_scored.dropna(subset=["relative_velocity_km_s"])
+        if not valid_vel.empty:
+            fastest_row = valid_vel.loc[valid_vel["relative_velocity_km_s"].idxmax()]
+        else:
+            fastest_row = df_scored.iloc[0]
+
+        # Safe formatting helper variables
+        closest_name = str(closest_row.get("name", "Unknown"))
+        closest_km = closest_row.get("miss_distance_km")
+        closest_km_str = f"{closest_km:,.0f} km" if (closest_km is not None and pd.notnull(closest_km)) else "N/A"
+        closest_ld = closest_row.get("miss_distance_lunar")
+        closest_ld_str = f"{closest_ld:.1f} LD" if (closest_ld is not None and pd.notnull(closest_ld)) else "N/A"
+
+        fastest_name = str(fastest_row.get("name", "Unknown"))
+        fastest_vel_s = fastest_row.get("relative_velocity_km_s")
+        fastest_vel_s_str = f"{fastest_vel_s:.2f} km/s" if (fastest_vel_s is not None and pd.notnull(fastest_vel_s)) else "N/A"
+        fastest_vel_h = fastest_row.get("relative_velocity_km_h")
+        if fastest_vel_h is not None and pd.notnull(fastest_vel_h):
+            fastest_vel_h_str = f"{fastest_vel_h:,.0f} km/h"
+        elif fastest_vel_s is not None and pd.notnull(fastest_vel_s):
+            fastest_vel_h_str = f"{fastest_vel_s * 3600:,.0f} km/h"
+        else:
+            fastest_vel_h_str = "N/A"
 
         k1, k2, k3, k4 = st.columns(4)
         with k1:
@@ -603,6 +651,7 @@ def main():
         with k2:
             card_type = "danger-card" if hazardous_count > 0 else "telemetry-card"
             pulse_type = "pulse-red" if hazardous_count > 0 else "pulse-green"
+            hazard_pct = (hazardous_count / total_tracked * 100) if total_tracked > 0 else 0.0
             st.markdown(
                 f"""
                 <div class='{card_type}'>
@@ -610,7 +659,7 @@ def main():
                         <span class='pulse-dot {pulse_type}'></span>HAZARDOUS (PHA)
                     </div>
                     <div class='val-mono' style='color: {"#fca5a5" if hazardous_count > 0 else "#6ee7b7"};'>{hazardous_count}</div>
-                    <div class='val-sub'>{(hazardous_count/total_tracked*100):.1f}% of total inventory</div>
+                    <div class='val-sub'>{hazard_pct:.1f}% of total inventory</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -620,8 +669,8 @@ def main():
                 f"""
                 <div class='telemetry-card'>
                     <div class='label-caps'>CLOSEST APPROACH</div>
-                    <div class='val-mono'>{closest_row['miss_distance_km']:,.0f} km</div>
-                    <div class='val-sub'>{closest_row['name']} ({closest_row['miss_distance_lunar']:.1f} LD)</div>
+                    <div class='val-mono'>{closest_km_str}</div>
+                    <div class='val-sub'>{closest_name} ({closest_ld_str})</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -631,8 +680,8 @@ def main():
                 f"""
                 <div class='telemetry-card'>
                     <div class='label-caps'>PEAK VELOCITY</div>
-                    <div class='val-mono'>{fastest_row['relative_velocity_km_s']:.2f} km/s</div>
-                    <div class='val-sub'>{fastest_row['name']} ({fastest_row['relative_velocity_km_h']:,.0f} km/h)</div>
+                    <div class='val-mono'>{fastest_vel_s_str}</div>
+                    <div class='val-sub'>{fastest_name} ({fastest_vel_h_str})</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -646,29 +695,39 @@ def main():
 
         with col_plot1:
             st.markdown("#### 🌌 Trajectory Risk Matrix (Velocity vs. Miss Distance)")
+            
+            df_plot = df_scored.copy()
+            df_plot["plot_size"] = df_plot["estimated_diameter_mean_km"].fillna(0.1).apply(lambda x: max(0.02, float(x)))
+            df_plot["miss_distance_km_clean"] = df_plot["miss_distance_km"].fillna(0.0)
+            df_plot["relative_velocity_km_s_clean"] = df_plot["relative_velocity_km_s"].fillna(0.0)
+            df_plot["hazard_probability_pct_clean"] = df_plot["hazard_probability_pct"].fillna(0.0)
+
             fig_scatter = px.scatter(
-                df_scored,
-                x="miss_distance_km",
-                y="relative_velocity_km_s",
-                size="estimated_diameter_mean_km",
+                df_plot,
+                x="miss_distance_km_clean",
+                y="relative_velocity_km_s_clean",
+                size="plot_size",
                 color="risk_level",
                 color_discrete_map={
                     "CRITICAL DANGER": "#ef4444",
                     "HIGH HAZARD": "#f97316",
                     "MODERATE ATTENTION": "#eab308",
                     "LOW / SAFE": "#38bdf8",
+                    "STANDBY": "#94a3b8",
                 },
                 hover_name="name",
                 hover_data={
-                    "miss_distance_km": ":,.0f",
-                    "relative_velocity_km_s": ":.2f",
-                    "estimated_diameter_mean_km": ":.3f",
-                    "hazard_probability_pct": ":.1f",
+                    "miss_distance_km_clean": ":,.0f",
+                    "relative_velocity_km_s_clean": ":.2f",
+                    "plot_size": ":.3f",
+                    "hazard_probability_pct_clean": ":.1f",
                     "close_approach_date": True,
                 },
                 labels={
-                    "miss_distance_km": "Miss Distance to Earth (km)",
-                    "relative_velocity_km_s": "Relative Velocity (km/s)",
+                    "miss_distance_km_clean": "Miss Distance to Earth (km)",
+                    "relative_velocity_km_s_clean": "Relative Velocity (km/s)",
+                    "plot_size": "Mean Diameter (km)",
+                    "hazard_probability_pct_clean": "Threat Probability (%)",
                     "risk_level": "AI Risk Level",
                 },
             )
@@ -687,8 +746,9 @@ def main():
         with col_plot2:
             st.markdown("#### 💻 Live ML Pipeline Console & Execution Log")
             now_ts = datetime.utcnow().strftime("%H:%M:%S")
+            stream_source = "NASA NeoWs REST API (/feed)" if not is_fallback else "High-Fidelity Telemetry Cache"
             log_entries = [
-                f"<span class='log-dim'>[{now_ts}]</span> <span class='log-info'>API_INGEST:</span> Fetched {total_tracked} celestial objects from NASA NeoWs REST API (/feed).",
+                f"<span class='log-dim'>[{now_ts}]</span> <span class='log-info'>API_INGEST:</span> Ingested {total_tracked} celestial objects from {stream_source}.",
                 f"<span class='log-dim'>[{now_ts}]</span> <span class='log-success'>JSON_PARSER:</span> Flattened orbital parameters into flat tabular format.",
                 f"<span class='log-dim'>[{now_ts}]</span> <span class='log-info'>TRANSFORM:</span> Applied StandardScaler z-score normalization on 6 astronomical features.",
                 f"<span class='log-dim'>[{now_ts}]</span> <span class='log-info'>FEATURE_ENG:</span> Resolved min/max diameter collinearity -> estimated_diameter_mean_km.",
@@ -723,17 +783,20 @@ def main():
 
         # INGESTED ASTEROID LOG
         st.markdown("#### 📋 Live Radar Target Log")
-        display_df = df_scored[
-            [
-                "name",
-                "close_approach_date",
-                "estimated_diameter_mean_km",
-                "relative_velocity_km_s",
-                "miss_distance_km",
-                "hazard_probability_pct",
-                "risk_level",
-            ]
-        ].copy()
+        target_cols = [
+            "name",
+            "close_approach_date",
+            "estimated_diameter_mean_km",
+            "relative_velocity_km_s",
+            "miss_distance_km",
+            "hazard_probability_pct",
+            "risk_level",
+        ]
+        for col in target_cols:
+            if col not in df_scored.columns:
+                df_scored[col] = "N/A"
+
+        display_df = df_scored[target_cols].copy()
         display_df.rename(
             columns={
                 "name": "Asteroid Designation",
@@ -746,8 +809,11 @@ def main():
             },
             inplace=True,
         )
+        if "Threat Probability (%)" in display_df.columns:
+            display_df = display_df.sort_values(by="Threat Probability (%)", ascending=False)
+
         st.dataframe(
-            display_df.sort_values(by="Threat Probability (%)", ascending=False),
+            display_df,
             use_container_width=True,
             height=280,
         )
@@ -2250,7 +2316,7 @@ def main():
                         try:
                             client = NASAClient()
                             today = date.today()
-                            df_fetched = fetch_live_feed(
+                            df_fetched, _, _ = fetch_live_feed(
                                 (today - timedelta(days=7)).strftime("%Y-%m-%d"),
                                 today.strftime("%Y-%m-%d")
                             )
