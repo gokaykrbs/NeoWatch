@@ -1,5 +1,7 @@
 # 🌌 NeoWatch-OS — Planetary Defense & Telemetry Dashboard
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit%20App-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://bxcgyhmljva6ptxzzjbnlm.streamlit.app)
+
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-FF4B4B.svg)](https://streamlit.io/)
 [![XGBoost](https://img.shields.io/badge/Model-XGBoost-orange.svg)](https://xgboost.readthedocs.io/)
@@ -8,6 +10,8 @@
 [![Status: Active](https://img.shields.io/badge/Status-Active%20Development-success.svg)](#)
 
 > **NeoWatch-OS** is an end-to-end, full-stack data pipeline and visualization dashboard designed for tracking, classifying, and simulating Near-Earth Objects (NEOs). By consuming real-time telemetry from the NASA NeoWs REST API, the system applies machine learning algorithms to assess hazard levels and features a robust physics engine for theoretical impact simulations.
+> 
+> 🔗 **Live Web App:** [https://bxcgyhmljva6ptxzzjbnlm.streamlit.app](https://bxcgyhmljva6ptxzzjbnlm.streamlit.app)
 
 ---
 
@@ -175,12 +179,13 @@ NeoWatch_Code/
 
 ## 🚀 6. Installation & Quick Start
 
-### Command Line Instructions
+### Quick Start (Windows)
+Double-click `run.bat` or run:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/NeoWatch-OS.git
-cd NeoWatch-OS/NeoWatch_Code
+git clone https://github.com/gokaykrbs/NeoWatch.git
+cd NeoWatch
 
 # 2. Create and activate virtual environment
 python -m venv .venv
@@ -190,15 +195,11 @@ source .venv/bin/activate      # On macOS/Linux
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Configure NASA API Key
+# 4. Configure NASA API Key (Optional)
 cp .env.example .env
 # Edit .env and add your NASA_API_KEY=your_api_key_here
 
-# 5. (Optional) Run pipeline to re-extract data and train model
-python -m src.collect_data
-python -m src.train_pipeline
-
-# 6. Launch the Streamlit dashboard
+# 5. Launch the Streamlit dashboard
 streamlit run app.py
 ```
 Open your browser at `http://localhost:8501`.
@@ -207,13 +208,18 @@ Open your browser at `http://localhost:8501`.
 
 ## 🌐 7. Cloud Deployment (Streamlit Community Cloud)
 
-1. Push this repository to GitHub (ensure `.env` and `data/*.csv` are ignored).
+NeoWatch is deployed and live on Streamlit Community Cloud:
+
+🔗 **Live Application URL:** [https://bxcgyhmljva6ptxzzjbnlm.streamlit.app](https://bxcgyhmljva6ptxzzjbnlm.streamlit.app)
+
+To deploy your own fork/instance:
+1. Fork or push this repository to GitHub (ensure `.env` and `data/*.csv` are ignored).
 2. Connect your GitHub repository to [Streamlit Community Cloud](https://share.streamlit.io/).
 3. In **App Settings > Secrets**, add your NASA API Key:
    ```toml
    NASA_API_KEY = "your_nasa_api_key"
    ```
-4. Click **Deploy** to launch your live planetary defense web application!
+4. Set **Main file path** to `app.py` and click **Deploy**!
 
 ---
 
