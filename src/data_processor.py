@@ -4,6 +4,7 @@ Adheres to NASA Proje Plani 2.pdf architecture for modular data cleaning,
 IQR outlier management, multicollinearity handling, scaling, and SMOTE oversampling.
 """
 
+import sys
 import logging
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
@@ -13,6 +14,13 @@ import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, RobustScaler
 from imblearn.over_sampling import SMOTE
+
+# Setup paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+if "." not in sys.path:
+    sys.path.insert(0, ".")
 
 from src.config import (
     RAW_DATA_PATH,

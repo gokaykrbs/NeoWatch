@@ -24,8 +24,16 @@ from sklearn.metrics import (
     roc_curve,
     precision_recall_curve,
 )
+import sys
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
+
+# Setup paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+if "." not in sys.path:
+    sys.path.insert(0, ".")
 
 from src.config import MODEL_PATH, LEGACY_MODEL_PATH, FEATURE_COLUMNS
 

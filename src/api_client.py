@@ -11,7 +11,15 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
+import sys
 from pathlib import Path
+
+# Setup paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+if "." not in sys.path:
+    sys.path.insert(0, ".")
 
 try:
     import pandas as pd

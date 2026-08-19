@@ -3,12 +3,20 @@ NeoWatch - Real-Time Inference & Risk Scoring Engine
 Loads serialized model and scaler artifacts to generate real-time hazard predictions and risk scores.
 """
 
+import sys
 import logging
 from pathlib import Path
 from typing import Dict, Any, Union, List, Optional
 import numpy as np
 import pandas as pd
 import joblib
+
+# Setup paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+if "." not in sys.path:
+    sys.path.insert(0, ".")
 
 from src.config import (
     SCALER_PATH,

@@ -4,8 +4,17 @@ Executes batch extraction from NASA NeoWs API and outputs raw dataset to data/ra
 """
 
 import argparse
+import os
 import sys
+from pathlib import Path
 from datetime import datetime, timedelta
+
+# Setup paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+if "." not in sys.path:
+    sys.path.insert(0, ".")
 
 from src.api_client import NASAClient
 from src.config import RAW_DATA_PATH, NASA_API_KEY

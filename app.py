@@ -3,9 +3,23 @@
 Enterprise-Grade Mission Control Dashboard inspired by NASA NeoWs Telemetry & Modern Dark Glassmorphism.
 """
 
+import os
 import sys
-import math
 from pathlib import Path
+
+# Setup Path to ensure Streamlit Cloud and local environments resolve the package & modules properly
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR_STR = str(BASE_DIR)
+if ROOT_DIR_STR not in sys.path:
+    sys.path.insert(0, ROOT_DIR_STR)
+if "." not in sys.path:
+    sys.path.insert(0, ".")
+    sys.path.append(".")
+_cwd = os.path.abspath(os.getcwd())
+if _cwd not in sys.path:
+    sys.path.insert(0, _cwd)
+
+import math
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List, Tuple
 import pandas as pd
@@ -13,11 +27,6 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-
-# Setup Path
-BASE_DIR = Path(__file__).resolve().parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.append(str(BASE_DIR))
 
 from src.config import (
     RAW_DATA_PATH,
