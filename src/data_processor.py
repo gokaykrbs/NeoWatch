@@ -1,9 +1,6 @@
-"""
-NeoWatch - Data Processor & Feature Engineering Module
-Adheres to NASA Proje Plani 2.pdf architecture for modular data cleaning,
-IQR outlier management, multicollinearity handling, scaling, and SMOTE oversampling.
-"""
+from __future__ import annotations
 
+import os
 import sys
 import logging
 from pathlib import Path
@@ -17,20 +14,31 @@ from imblearn.over_sampling import SMOTE
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
-if "." not in sys.path:
-    sys.path.insert(0, ".")
+SRC_DIR = BASE_DIR / "src"
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from src.config import (
-    RAW_DATA_PATH,
-    PROCESSED_DATA_PATH,
-    LEGACY_RAW_DATA_PATH,
-    LEGACY_PROCESSED_DATA_PATH,
-    SCALER_PATH,
-    FEATURE_COLUMNS,
-    TARGET_COLUMN,
-)
+try:
+    from src.config import (
+        RAW_DATA_PATH,
+        PROCESSED_DATA_PATH,
+        LEGACY_RAW_DATA_PATH,
+        LEGACY_PROCESSED_DATA_PATH,
+        SCALER_PATH,
+        FEATURE_COLUMNS,
+        TARGET_COLUMN,
+    )
+except (ImportError, ModuleNotFoundError):
+    from config import (
+        RAW_DATA_PATH,
+        PROCESSED_DATA_PATH,
+        LEGACY_RAW_DATA_PATH,
+        LEGACY_PROCESSED_DATA_PATH,
+        SCALER_PATH,
+        FEATURE_COLUMNS,
+        TARGET_COLUMN,
+    )
 
 logger = logging.getLogger("NeoWatch.DataProcessor")
 

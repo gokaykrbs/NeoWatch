@@ -1,7 +1,4 @@
-"""
-NeoWatch - NASA NeoWs API Client & Data Ingestion Engine
-Handles rate limiting, 7-day chunk sliding windows, retries, and JSON flattening.
-"""
+from __future__ import annotations
 
 import time
 import json
@@ -11,15 +8,16 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
+import os
 import sys
 from pathlib import Path
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
-if "." not in sys.path:
-    sys.path.insert(0, ".")
+SRC_DIR = BASE_DIR / "src"
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 try:
     import pandas as pd
@@ -27,15 +25,26 @@ try:
 except ImportError:
     HAS_PANDAS = False
 
-from src.config import (
-    NASA_API_KEY,
-    NASA_FEED_BASE_URL,
-    REQUEST_DELAY_SECONDS,
-    MAX_RETRIES,
-    BACKOFF_FACTOR,
-    RAW_DATA_PATH,
-    get_nasa_api_key,
-)
+try:
+    from src.config import (
+        NASA_API_KEY,
+        NASA_FEED_BASE_URL,
+        REQUEST_DELAY_SECONDS,
+        MAX_RETRIES,
+        BACKOFF_FACTOR,
+        RAW_DATA_PATH,
+        get_nasa_api_key,
+    )
+except (ImportError, ModuleNotFoundError):
+    from config import (
+        NASA_API_KEY,
+        NASA_FEED_BASE_URL,
+        REQUEST_DELAY_SECONDS,
+        MAX_RETRIES,
+        BACKOFF_FACTOR,
+        RAW_DATA_PATH,
+        get_nasa_api_key,
+    )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
 logger = logging.getLogger("NeoWatch.APIClient")

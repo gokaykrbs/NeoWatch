@@ -2,27 +2,44 @@
 NeoWatch - Complete ML Training Pipeline Runner
 Executes Preprocessing (Checkpoint 2) -> Model Training & Tuning (Checkpoint 3) -> Evaluation Report.
 """
+from __future__ import annotations
 
+import os
 import sys
 import logging
 from pathlib import Path
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.append(str(BASE_DIR))
+SRC_DIR = BASE_DIR / "src"
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from src.config import (
-    RAW_DATA_PATH,
-    PROCESSED_DATA_PATH,
-    LEGACY_RAW_DATA_PATH,
-    LEGACY_PROCESSED_DATA_PATH,
-    SCALER_PATH,
-    MODEL_PATH,
-    LEGACY_MODEL_PATH,
-)
-from src.data_processor import DataProcessor
-from src.model_trainer import AsteroidModelTrainer
+try:
+    from src.config import (
+        RAW_DATA_PATH,
+        PROCESSED_DATA_PATH,
+        LEGACY_RAW_DATA_PATH,
+        LEGACY_PROCESSED_DATA_PATH,
+        SCALER_PATH,
+        MODEL_PATH,
+        LEGACY_MODEL_PATH,
+    )
+    from src.data_processor import DataProcessor
+    from src.model_trainer import AsteroidModelTrainer
+except (ImportError, ModuleNotFoundError):
+    from config import (
+        RAW_DATA_PATH,
+        PROCESSED_DATA_PATH,
+        LEGACY_RAW_DATA_PATH,
+        LEGACY_PROCESSED_DATA_PATH,
+        SCALER_PATH,
+        MODEL_PATH,
+        LEGACY_MODEL_PATH,
+    )
+    from data_processor import DataProcessor
+    from model_trainer import AsteroidModelTrainer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
 logger = logging.getLogger("NeoWatch.Pipeline")

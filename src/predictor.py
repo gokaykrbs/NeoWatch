@@ -1,8 +1,6 @@
-"""
-NeoWatch - Real-Time Inference & Risk Scoring Engine
-Loads serialized model and scaler artifacts to generate real-time hazard predictions and risk scores.
-"""
+from __future__ import annotations
 
+import os
 import sys
 import logging
 from pathlib import Path
@@ -13,17 +11,25 @@ import joblib
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
-if "." not in sys.path:
-    sys.path.insert(0, ".")
+SRC_DIR = BASE_DIR / "src"
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from src.config import (
-    SCALER_PATH,
-    MODEL_PATH,
-    LEGACY_MODEL_PATH,
-    FEATURE_COLUMNS,
-)
+try:
+    from src.config import (
+        SCALER_PATH,
+        MODEL_PATH,
+        LEGACY_MODEL_PATH,
+        FEATURE_COLUMNS,
+    )
+except (ImportError, ModuleNotFoundError):
+    from config import (
+        SCALER_PATH,
+        MODEL_PATH,
+        LEGACY_MODEL_PATH,
+        FEATURE_COLUMNS,
+    )
 
 logger = logging.getLogger("NeoWatch.Predictor")
 

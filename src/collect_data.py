@@ -1,7 +1,4 @@
-"""
-NeoWatch - Historical Data Collection Script
-Executes batch extraction from NASA NeoWs API and outputs raw dataset to data/raw_asteroid_data.csv.
-"""
+from __future__ import annotations
 
 import argparse
 import os
@@ -11,13 +8,17 @@ from datetime import datetime, timedelta
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
-if "." not in sys.path:
-    sys.path.insert(0, ".")
+SRC_DIR = BASE_DIR / "src"
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from src.api_client import NASAClient
-from src.config import RAW_DATA_PATH, NASA_API_KEY
+try:
+    from src.api_client import NASAClient
+    from src.config import RAW_DATA_PATH, NASA_API_KEY
+except (ImportError, ModuleNotFoundError):
+    from api_client import NASAClient
+    from config import RAW_DATA_PATH, NASA_API_KEY
 
 
 def main():

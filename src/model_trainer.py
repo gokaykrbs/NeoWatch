@@ -1,9 +1,7 @@
-"""
-NeoWatch - Machine Learning Training, Cross-Validation & Optimization Engine
-Trains benchmark models (Logistic Regression, Random Forest, LightGBM, XGBoost),
-tunes hyperparameters with GridSearchCV, and serializes the best model optimized for Recall and ROC-AUC.
-"""
+from __future__ import annotations
 
+import os
+import sys
 import logging
 from pathlib import Path
 from typing import Dict, Any, Tuple, Optional
@@ -24,18 +22,20 @@ from sklearn.metrics import (
     roc_curve,
     precision_recall_curve,
 )
-import sys
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(BASE_DIR))
-if "." not in sys.path:
-    sys.path.insert(0, ".")
+SRC_DIR = BASE_DIR / "src"
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-from src.config import MODEL_PATH, LEGACY_MODEL_PATH, FEATURE_COLUMNS
+try:
+    from src.config import MODEL_PATH, LEGACY_MODEL_PATH, FEATURE_COLUMNS
+except (ImportError, ModuleNotFoundError):
+    from config import MODEL_PATH, LEGACY_MODEL_PATH, FEATURE_COLUMNS
 
 logger = logging.getLogger("NeoWatch.ModelTrainer")
 

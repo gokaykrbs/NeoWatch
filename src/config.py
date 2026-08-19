@@ -1,18 +1,22 @@
-"""
-NeoWatch - Configuration & Global Constants
-Manages environment variables, API endpoints, directory paths, and project settings.
-"""
+from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+from typing import Optional, Dict, Any, List, Tuple, Union
 from dotenv import load_dotenv
 
 # Base Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
+SRC_DIR = BASE_DIR / "src"
 DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
 NOTEBOOKS_DIR = BASE_DIR / "notebooks"
-SRC_DIR = BASE_DIR / "src"
+
+# Ensure root paths are in sys.path
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 # Plan 2 Primary Paths (NASA Proje Plani 2.pdf)
 RAW_DATA_PATH = DATA_DIR / "raw_data.csv"
@@ -31,7 +35,7 @@ load_dotenv(BASE_DIR / ".env")
 # Default Registered NASA API Key (ensures uninterrupted service in cloud/clean environments)
 DEFAULT_REGISTERED_API_KEY = "LudI23zGGE14cnCd8a4D0DhiNuIoYaDBbZOTN8ly"
 
-def get_nasa_api_key(custom_key: str | None = None) -> str:
+def get_nasa_api_key(custom_key: Optional[str] = None) -> str:
     """
     Resolve the best available NASA NeoWs API key with multi-source hierarchy:
     1. Direct runtime custom_key parameter (e.g. from UI input)

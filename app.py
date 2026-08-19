@@ -1,7 +1,4 @@
-"""
-🌌 NEOWATCH-OS — NASA Planetary Defense & Asteroid Hazard Prediction System
-Enterprise-Grade Mission Control Dashboard inspired by NASA NeoWs Telemetry & Modern Dark Glassmorphism.
-"""
+from __future__ import annotations
 
 import os
 import sys
@@ -9,15 +6,11 @@ from pathlib import Path
 
 # Setup Path to ensure Streamlit Cloud and local environments resolve the package & modules properly
 BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR_STR = str(BASE_DIR)
-if ROOT_DIR_STR not in sys.path:
-    sys.path.insert(0, ROOT_DIR_STR)
-if "." not in sys.path:
-    sys.path.insert(0, ".")
-    sys.path.append(".")
-_cwd = os.path.abspath(os.getcwd())
-if _cwd not in sys.path:
-    sys.path.insert(0, _cwd)
+SRC_DIR = BASE_DIR / "src"
+
+for p in [str(BASE_DIR), str(SRC_DIR), ".", os.path.abspath(".")]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 import math
 from datetime import datetime, date, timedelta
@@ -28,28 +21,52 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.config import (
-    RAW_DATA_PATH,
-    PROCESSED_DATA_PATH,
-    SCALER_PATH,
-    MODEL_PATH,
-    FEATURE_COLUMNS,
-    get_nasa_api_key,
-    DEFAULT_REGISTERED_API_KEY,
-)
-from src.api_client import NASAClient
-from src.predictor import AsteroidPredictor
-from src.physics_engine import (
-    calculate_impact,
-    ImpactPhysicsEngine,
-    ImpactParameters,
-    ImpactResults,
-    ASTEROID_PRESETS,
-    DENSITY_PRESETS,
-    TARGET_LOCATIONS,
-    build_3d_playground_canvas,
-    build_energy_comparison_chart,
-)
+try:
+    from src.config import (
+        RAW_DATA_PATH,
+        PROCESSED_DATA_PATH,
+        SCALER_PATH,
+        MODEL_PATH,
+        FEATURE_COLUMNS,
+        get_nasa_api_key,
+        DEFAULT_REGISTERED_API_KEY,
+    )
+    from src.api_client import NASAClient
+    from src.predictor import AsteroidPredictor
+    from src.physics_engine import (
+        calculate_impact,
+        ImpactPhysicsEngine,
+        ImpactParameters,
+        ImpactResults,
+        ASTEROID_PRESETS,
+        DENSITY_PRESETS,
+        TARGET_LOCATIONS,
+        build_3d_playground_canvas,
+        build_energy_comparison_chart,
+    )
+except (ImportError, ModuleNotFoundError):
+    from config import (
+        RAW_DATA_PATH,
+        PROCESSED_DATA_PATH,
+        SCALER_PATH,
+        MODEL_PATH,
+        FEATURE_COLUMNS,
+        get_nasa_api_key,
+        DEFAULT_REGISTERED_API_KEY,
+    )
+    from api_client import NASAClient
+    from predictor import AsteroidPredictor
+    from physics_engine import (
+        calculate_impact,
+        ImpactPhysicsEngine,
+        ImpactParameters,
+        ImpactResults,
+        ASTEROID_PRESETS,
+        DENSITY_PRESETS,
+        TARGET_LOCATIONS,
+        build_3d_playground_canvas,
+        build_energy_comparison_chart,
+    )
 
 # Page Setup
 st.set_page_config(
