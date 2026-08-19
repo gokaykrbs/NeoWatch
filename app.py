@@ -342,6 +342,28 @@ st.markdown(
         box-shadow: 0 0 8px #a855f7;
         animation: pulse 1.5s infinite;
     }
+
+    /* Academic LaTeX & Expander Styling */
+    .katex-display, .katex {
+        color: #f1f5f9 !important;
+    }
+    [data-testid="stExpander"] {
+        background: linear-gradient(145deg, #0e0826 0%, #060310 100%) !important;
+        border: 1px solid rgba(168, 85, 247, 0.4) !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 20px rgba(168, 85, 247, 0.12) !important;
+        margin-top: 14px;
+        margin-bottom: 20px;
+    }
+    [data-testid="stExpander"] summary {
+        color: #c084fc !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+    }
+    [data-testid="stExpander"] summary:hover {
+        color: #e9d5ff !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -2048,21 +2070,26 @@ def main():
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # Mathematical Formula Reference Box
-        st.markdown(
-            r"""
-            <div class='playground-panel' style='padding: 16px 20px; margin-top: 10px;'>
-                <div class='label-caps' style='color: #c084fc; margin-bottom: 8px;'>📐 MATHEMATICAL & PHYSICS SPECIFICATIONS REFERENCE (v1.0)</div>
-                <div style='color: #cbd5e1; font-size: 12px; font-family: "JetBrains Mono", monospace; line-height: 1.8;'>
-                    <div>1. <b>Kinetic Energy & TNT Yield:</b> $E_k = \frac{1}{2} m v^2 \text{ (J)}, \quad E_{\text{megaton}} = \frac{E_k}{4.184 \times 10^{15}} \text{ (MT TNT)}$</div>
-                    <div>2. <b>Transient Crater Diameter (Pi-Scaling Law):</b> $D_{tc} = 1.161 \left(\frac{\rho_i}{\rho_t}\right)^{1/3} D_i^{0.78} v^{0.44} g^{-0.22} \sin^{1/3}(\theta)$</div>
-                    <div>3. <b>Atmospheric Skip Condition:</b> $\theta < 10^\circ \implies \text{Atmospheric Ricochet Occurred (No Surface Excavation)}$</div>
-                    <div>4. <b>Damage Matrix:</b> $<10\text{ Mt (Airburst)} \quad|\quad 10-100\text{ Mt (Local Destruction)} \quad|\quad 100-1,000,000\text{ Mt (Regional Devastation)} \quad|\quad >1,000,000\text{ Mt (Global Extinction)}$</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        # Mathematical Formula Reference Panel
+        with st.expander("📐 MATHEMATICAL & PHYSICS SPECIFICATIONS REFERENCE (v1.0)", expanded=True):
+            ref_col1, ref_col2 = st.columns(2)
+            with ref_col1:
+                st.markdown(r"**1. Kinetic Energy & TNT Yield Equivalents:**")
+                st.latex(r"E_k = \frac{1}{2} m v^2 \quad [\text{Joules}] \qquad \Longleftrightarrow \qquad E_{\text{megaton}} = \frac{E_k}{4.184 \times 10^{15}} \quad [\text{MT TNT}]")
+                st.caption("Classical Newtonian kinetic energetics and standard TNT conversion factor.")
+
+                st.markdown(r"**3. Atmospheric Skip Condition ($\theta < 10^\circ$):**")
+                st.latex(r"\theta < 10^\circ \implies \text{Atmospheric Ricochet Occurred } (D_{tc} = 0, \text{ No Surface Excavation})")
+                st.caption("Impactor grazes upper atmosphere (mesosphere/thermosphere) and deflects back to deep space.")
+
+            with ref_col2:
+                st.markdown(r"**2. Transient Crater Diameter ($\pi$-Scaling Law):**")
+                st.latex(r"D_{tc} = 1.161 \left(\frac{\rho_i}{\rho_t}\right)^{1/3} D_i^{0.78} \, v^{0.44} \, g^{-0.22} \, \sin^{1/3}(\theta)")
+                st.caption("Schmidt-Holsapple dimensional scaling factoring projectile/target density, diameter, velocity, and entry angle.")
+
+                st.markdown(r"**4. Planetary Defense Damage Classification Matrix:**")
+                st.latex(r"\begin{cases} < 10\text{ Mt} & \text{Airburst (Upper Atmosphere Detonation)} \\ 10 - 100\text{ Mt} & \text{Local Destruction (City-Scale Flattening)} \\ 100 - 1{,}000{,}000\text{ Mt} & \text{Regional Devastation (Continental Impact)} \\ > 1{,}000{,}000\text{ Mt} & \text{Global Extinction Threat (Impact Winter)} \end{cases}")
+                st.caption("Multi-tier planetary threat severity based on total kinetic energy release.")
 
     # =========================================================================
     # TAB 3: MODEL BENCHMARKS & METRICS
