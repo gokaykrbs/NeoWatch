@@ -28,8 +28,42 @@ LEGACY_MODEL_PATH = MODELS_DIR / "asteroid_model.pkl"
 # Load .env file
 load_dotenv(BASE_DIR / ".env")
 
+# Default Registered NASA API Key (ensures uninterrupted service in cloud/clean environments)
+DEFAULT_REGISTERED_API_KEY = "LudI23zGGE14cnCd8a4D0DhiNuIoYaDBbZOTN8ly"
+
+def get_nasa_api_key(custom_key: str | None = None) -> str:
+    """
+    Resolve the best available NASA NeoWs API key with multi-source hierarchy:
+    1. Direct runtime custom_key parameter (e.g. from UI input)
+    2. Streamlit secrets (st.secrets["NASA_API_KEY"])
+    3. Environment variable (os.getenv("NASA_API_KEY"))
+    4. Verified registered fallback key (DEFAULT_REGISTERED_API_KEY)
+    5. DEMO_KEY
+    """
+    if custom_key and str(custom_key).strip():
+        return str(custom_key).strip()
+
+    # Check Streamlit secrets if running inside Streamlit
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "NASA_API_KEY" in st.secrets:
+            sec_key = str(st.secrets["NASA_API_KEY"]).strip()
+            if sec_key and sec_key != "DEMO_KEY":
+                return sec_key
+    except Exception:
+        pass
+
+    # Check environment variable / .env
+    env_key = os.getenv("NASA_API_KEY", "").strip()
+    if env_key and env_key != "DEMO_KEY":
+        return env_key
+
+    # Return registered production key to prevent rate limit blocks on Streamlit Cloud / clean clones
+    return DEFAULT_REGISTERED_API_KEY
+
+
 # NASA NeoWs API Configuration
-NASA_API_KEY = os.getenv("NASA_API_KEY", "DEMO_KEY")
+NASA_API_KEY = get_nasa_api_key()
 NASA_FEED_BASE_URL = "https://api.nasa.gov/neo/rest/v1/feed"
 NASA_NEO_BROWSE_URL = "https://api.nasa.gov/neo/rest/v1/neo/browse"
 

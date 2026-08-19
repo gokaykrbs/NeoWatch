@@ -26,6 +26,7 @@ from src.config import (
     MAX_RETRIES,
     BACKOFF_FACTOR,
     RAW_DATA_PATH,
+    get_nasa_api_key,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
@@ -36,9 +37,11 @@ class NASAClient:
     """Client for querying and processing NASA's Near Earth Object Web Service (NeoWs) API."""
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or NASA_API_KEY
+        self.api_key = get_nasa_api_key(api_key)
         if not self.api_key or self.api_key == "DEMO_KEY":
             logger.warning("Using DEMO_KEY. Rate limit is strictly 30 requests/hour and 50 requests/day.")
+        else:
+            logger.info("NASAClient initialized with API key [%s...%s]", self.api_key[:4], self.api_key[-4:])
 
     def fetch_feed_chunk(self, start_date: str, end_date: str) -> Dict[str, Any]:
         """

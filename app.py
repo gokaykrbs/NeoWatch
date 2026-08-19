@@ -7,6 +7,7 @@ import sys
 import math
 from pathlib import Path
 from datetime import datetime, date, timedelta
+from typing import Optional, Dict, Any, List, Tuple
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -18,7 +19,15 @@ BASE_DIR = Path(__file__).resolve().parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
-from src.config import RAW_DATA_PATH, PROCESSED_DATA_PATH, SCALER_PATH, MODEL_PATH, FEATURE_COLUMNS
+from src.config import (
+    RAW_DATA_PATH,
+    PROCESSED_DATA_PATH,
+    SCALER_PATH,
+    MODEL_PATH,
+    FEATURE_COLUMNS,
+    get_nasa_api_key,
+    DEFAULT_REGISTERED_API_KEY,
+)
 from src.api_client import NASAClient
 from src.predictor import AsteroidPredictor
 from src.physics_engine import (
@@ -380,23 +389,54 @@ def get_predictor() -> AsteroidPredictor:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_live_feed(start_date_str: str, end_date_str: str) -> tuple[pd.DataFrame, bool, str]:
+def _fetch_from_nasa_api(start_date_str: str, end_date_str: str, api_key: str) -> pd.DataFrame:
     """
-    Fetch and cache live NASA NeoWs API asteroid data.
+    Directly query NASA NeoWs REST API feed and parse records.
+    Exceptions are raised so that network/rate-limit failures are never cached by Streamlit.
+    """
+    client = NASAClient(api_key=api_key)
+    json_data = client.fetch_feed_chunk(start_date_str, end_date_str)
+    records = client.parse_feed_json(json_data)
+    df = pd.DataFrame(records)
+    if not df.empty:
+        df = df.drop_duplicates(subset=["id", "close_approach_date"]).reset_index(drop=True)
+    return df
+
+
+def fetch_live_feed(
+    start_date_str: str,
+    end_date_str: str,
+    api_key: Optional[str] = None,
+    force_refresh: bool = False,
+) -> tuple[pd.DataFrame, bool, str]:
+    """
+    Fetch and cache live NASA NeoWs API asteroid data with automatic key resolution and cache fallback.
     Returns: (df, is_fallback, status_msg)
     """
-    try:
-        client = NASAClient()
-        json_data = client.fetch_feed_chunk(start_date_str, end_date_str)
-        records = client.parse_feed_json(json_data)
-        df = pd.DataFrame(records)
-        if not df.empty:
-            df = df.drop_duplicates(subset=["id", "close_approach_date"]).reset_index(drop=True)
-            return df, False, "LIVE_FEED_OK"
-    except Exception as exc:
-        pass
+    effective_key = get_nasa_api_key(api_key)
 
-    # High-fidelity telemetry cache fallback if NASA API limit reached or unreachable
+    if force_refresh:
+        try:
+            _fetch_from_nasa_api.clear()
+        except Exception:
+            pass
+
+    # 1. Primary Live Feed Attempt with configured/provided key
+    try:
+        df = _fetch_from_nasa_api(start_date_str, end_date_str, effective_key)
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            return df, False, "LIVE_FEED_OK"
+    except Exception:
+        # If user entered key or DEMO_KEY failed, attempt registered fallback key
+        if effective_key != DEFAULT_REGISTERED_API_KEY:
+            try:
+                df = _fetch_from_nasa_api(start_date_str, end_date_str, DEFAULT_REGISTERED_API_KEY)
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    return df, False, "LIVE_FEED_OK"
+            except Exception:
+                pass
+
+    # 2. High-fidelity telemetry cache fallback if NASA API limit reached or unreachable
     raw_df = get_raw_dataset()
     if not raw_df.empty:
         fallback_df = raw_df.head(30).copy()
@@ -517,6 +557,24 @@ def main():
         )
 
         st.markdown("---")
+
+        with st.expander("🔑 NASA API Configuration", expanded=False):
+            custom_api_key = st.text_input(
+                "NASA API Key",
+                value="",
+                type="password",
+                placeholder="Auto (Registered API Key)",
+                help="Defaults to verified registered NASA API key. Enter your personal key from api.nasa.gov if desired.",
+            )
+            if st.button("🔄 Clear Cache & Re-fetch", use_container_width=True):
+                st.cache_data.clear()
+                try:
+                    _fetch_from_nasa_api.clear()
+                except Exception:
+                    pass
+                st.toast("⚡ Telemetry cache purged! Live stream re-synchronized.", icon="🚀")
+                st.rerun()
+
         st.markdown(
             """
             <div style='background: #050d18; border: 1px solid #132233; border-radius: 6px; padding: 10px;'>
@@ -583,10 +641,14 @@ def main():
         e_str = end_input.strftime("%Y-%m-%d")
 
         with st.spinner(f"Ingesting celestial coordinates from NASA NeoWs feed ({s_str} to {e_str})..."):
-            df_live, is_fallback, status_msg = fetch_live_feed(s_str, e_str)
+            df_live, is_fallback, status_msg = fetch_live_feed(
+                s_str, e_str, api_key=custom_api_key, force_refresh=run_query
+            )
 
         if is_fallback and status_msg == "FALLBACK_CACHE":
             st.warning("⚠️ **NASA NeoWs API Telemetry Notice:** Live API rate limit reached or server unreachable. Operating in **High-Fidelity Telemetry Cache Mode**.")
+        elif not is_fallback and status_msg == "LIVE_FEED_OK":
+            st.success(f"🟢 **NASA NeoWs Live Feed Active:** Telemetry stream synchronized ({len(df_live)} objects monitored across window {s_str} to {e_str}).")
 
         if df_live.empty:
             st.info("No celestial objects recorded in this orbital window. Please select a different date range.")
@@ -2314,11 +2376,12 @@ def main():
                 if st.button("🚀 Fetch Historical Catalog via NASA NeoWs API", use_container_width=True):
                     with st.spinner("Connecting to NASA API and extracting multi-day orbital records..."):
                         try:
-                            client = NASAClient()
                             today = date.today()
                             df_fetched, _, _ = fetch_live_feed(
-                                (today - timedelta(days=7)).strftime("%Y-%m-%d"),
-                                today.strftime("%Y-%m-%d")
+                                (today - timedelta(days=6)).strftime("%Y-%m-%d"),
+                                today.strftime("%Y-%m-%d"),
+                                api_key=custom_api_key,
+                                force_refresh=True,
                             )
                             if not df_fetched.empty:
                                 df_raw = df_fetched
