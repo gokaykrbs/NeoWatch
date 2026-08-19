@@ -16,13 +16,15 @@ venv/
 env/
 ENV/
 
-# Data Files (Avoid bloating git repo with large CSVs)
-data/*.csv
+# Data Files (Track curated project dataset)
+# data/*.csv
+!data/*.csv
 !data/.gitkeep
 
-# Model & Scaler Artifacts (Large binary files)
-models/*.pkl
-models/*.joblib
+# Model & Scaler Artifacts (Track pre-trained production models)
+# models/*.pkl
+!models/*.pkl
+!models/*.joblib
 !models/.gitkeep
 
 # OS generated files

@@ -391,25 +391,47 @@ def fetch_live_feed(start_date_str: str, end_date_str: str) -> pd.DataFrame:
     return df
 
 
+@st.cache_data(show_spinner=False)
 def get_raw_dataset() -> pd.DataFrame:
-    """Load the historical raw dataset (from Plan 2 raw_data.csv or legacy raw_asteroid_data.csv)."""
-    if Path(RAW_DATA_PATH).exists():
-        return pd.read_csv(RAW_DATA_PATH)
-    elif Path("data/raw_data.csv").exists():
-        return pd.read_csv("data/raw_data.csv")
-    elif Path("data/raw_asteroid_data.csv").exists():
-        return pd.read_csv("data/raw_asteroid_data.csv")
+    """Load the historical raw dataset with robust multi-path candidate fallback."""
+    candidates = [
+        Path(RAW_DATA_PATH),
+        BASE_DIR / "data" / "raw_data.csv",
+        BASE_DIR / "data" / "raw_asteroid_data.csv",
+        Path("data/raw_data.csv"),
+        Path("data/raw_asteroid_data.csv"),
+        Path(PROCESSED_DATA_PATH),
+        BASE_DIR / "data" / "processed_data.csv",
+    ]
+    for p in candidates:
+        if p.exists():
+            try:
+                df = pd.read_csv(p)
+                if not df.empty:
+                    return df
+            except Exception:
+                continue
     return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False)
 def get_processed_dataset() -> pd.DataFrame:
-    """Load processed ML-ready dataset (from Plan 2 processed_data.csv or legacy)."""
-    if Path(PROCESSED_DATA_PATH).exists():
-        return pd.read_csv(PROCESSED_DATA_PATH)
-    elif Path("data/processed_data.csv").exists():
-        return pd.read_csv("data/processed_data.csv")
-    elif Path("data/processed_asteroid_data.csv").exists():
-        return pd.read_csv("data/processed_asteroid_data.csv")
+    """Load processed ML-ready dataset with robust multi-path fallback."""
+    candidates = [
+        Path(PROCESSED_DATA_PATH),
+        BASE_DIR / "data" / "processed_data.csv",
+        BASE_DIR / "data" / "processed_asteroid_data.csv",
+        Path("data/processed_data.csv"),
+        Path("data/processed_asteroid_data.csv"),
+    ]
+    for p in candidates:
+        if p.exists():
+            try:
+                df = pd.read_csv(p)
+                if not df.empty:
+                    return df
+            except Exception:
+                continue
     return pd.DataFrame()
 
 
@@ -2214,81 +2236,440 @@ def main():
     # TAB 4: NEO CATALOG & DEEP ANALYTICS
     # =========================================================================
     elif nav_choice == "📋 NEO Catalog & Deep Analytics":
-        st.markdown("### 📋 NASA Near-Earth Object Historical Catalog & Analytics")
-        st.caption("Access and filter historical multi-year extracted database (NASA NeoWs REST API).")
+        st.markdown("### 📋 NASA Near-Earth Object Historical Catalog & Deep Analytics")
+        st.caption("Comprehensive multi-year historical telemetry extracted from NASA NeoWs REST API with multi-dimensional filtering, orbital mechanics, and statistical EDA.")
 
-        if Path(RAW_DATA_PATH).exists():
-            df_raw = pd.read_csv(RAW_DATA_PATH)
-        elif Path("data/raw_asteroid_data.csv").exists():
-            df_raw = pd.read_csv("data/raw_asteroid_data.csv")
-        else:
-            df_raw = pd.DataFrame()
+        df_raw = get_raw_dataset()
+
+        if df_raw.empty:
+            st.warning("⚠️ Historical catalog CSV was not located in default paths. Attempting live fetch or emergency load...")
+            col_load1, col_load2 = st.columns([2, 1])
+            with col_load1:
+                if st.button("🚀 Fetch Historical Catalog via NASA NeoWs API", use_container_width=True):
+                    with st.spinner("Connecting to NASA API and extracting multi-day orbital records..."):
+                        try:
+                            client = NASAClient()
+                            today = date.today()
+                            df_fetched = fetch_live_feed(
+                                (today - timedelta(days=7)).strftime("%Y-%m-%d"),
+                                today.strftime("%Y-%m-%d")
+                            )
+                            if not df_fetched.empty:
+                                df_raw = df_fetched
+                                st.success(f"Successfully fetched {len(df_raw)} records from NASA!")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"NASA API connection error: {e}")
+            with col_load2:
+                st.info("Ensure `data/raw_data.csv` is present in the repository.")
 
         if not df_raw.empty:
-            pha_count = int(df_raw["is_potentially_hazardous_asteroid"].sum())
-            safe_count = len(df_raw) - pha_count
+            # Clean and normalize columns
+            df_display = df_raw.copy()
+            if "is_potentially_hazardous_asteroid" in df_display.columns:
+                df_display["is_potentially_hazardous_asteroid"] = df_display["is_potentially_hazardous_asteroid"].astype(int)
 
-            st.markdown(
-                f"""
-                <div class='glass-container' style='padding: 12px; margin-bottom: 14px;'>
-                    <div style='display: flex; flex-wrap: wrap; gap: 24px; align-items: center;'>
-                        <span class='label-caps' style='color: #38bdf8;'>CATALOG RECORDS: {len(df_raw):,}</span>
-                        <span class='label-caps' style='color: #f87171;'>PHA HAZARDS: {pha_count:,} ({(pha_count/len(df_raw)*100):.1f}%)</span>
-                        <span class='label-caps' style='color: #34d399;'>SAFE NEOs: {safe_count:,}</span>
+            pha_count = int(df_display["is_potentially_hazardous_asteroid"].sum())
+            safe_count = len(df_display) - pha_count
+            pha_pct = (pha_count / len(df_display)) * 100 if len(df_display) > 0 else 0
+            max_vel = float(df_display["relative_velocity_km_s"].max()) if "relative_velocity_km_s" in df_display.columns else 0.0
+            min_dist_ld = float(df_display["miss_distance_lunar"].min()) if "miss_distance_lunar" in df_display.columns else 0.0
+
+            # -----------------------------------------------------------------
+            # 1. TOP TELEMETRY KPI CARDS (4 Columns)
+            # -----------------------------------------------------------------
+            kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
+            with kpi_c1:
+                st.markdown(
+                    f"""
+                    <div class='telemetry-card'>
+                        <div class='label-caps'>TOTAL CATALOG RECORDS</div>
+                        <div class='val-mono' style='color: #38bdf8;'>{len(df_display):,}</div>
+                        <div class='val-sub'>NASA NeoWs Validated</div>
                     </div>
-                </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kpi_c2:
+                st.markdown(
+                    f"""
+                    <div class='telemetry-card'>
+                        <div class='label-caps'>HAZARDOUS (PHA) OBJECTS</div>
+                        <div class='val-mono' style='color: #f87171;'>{pha_count:,} <span style='font-size: 13px;'>({pha_pct:.1f}%)</span></div>
+                        <div class='val-sub'>Potentially Hazardous Asteroids</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kpi_c3:
+                st.markdown(
+                    f"""
+                    <div class='telemetry-card'>
+                        <div class='label-caps'>MAX RELATIVE VELOCITY</div>
+                        <div class='val-mono' style='color: #fbbf24;'>{max_vel:.1f} <span style='font-size: 13px;'>km/s</span></div>
+                        <div class='val-sub'>{max_vel*3600:,.0f} km/h Peak Velocity</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kpi_c4:
+                st.markdown(
+                    f"""
+                    <div class='telemetry-card'>
+                        <div class='label-caps'>CLOSEST RECORDED FLYBY</div>
+                        <div class='val-mono' style='color: #34d399;'>{min_dist_ld:.3f} <span style='font-size: 13px;'>LD</span></div>
+                        <div class='val-sub'>~{min_dist_ld * 384400:,.0f} km from Earth</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+            # -----------------------------------------------------------------
+            # 2. ADVANCED MULTI-FILTER & SEARCH TOOLBAR
+            # -----------------------------------------------------------------
+            st.markdown(
+                """
+                <div class='glass-container' style='padding: 14px 18px; margin-bottom: 12px;'>
+                    <div class='label-caps' style='color: #38bdf8; margin-bottom: 8px;'>🔍 MULTI-PARAMETRIC CATALOG SEARCH & FILTERS</div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            # Filter Controls
-            fc1, fc2, fc3 = st.columns([2, 1.5, 1.5])
-            with fc1:
-                search_query = st.text_input("🔍 Search Asteroid by Name or ID...", "")
-            with fc2:
-                only_pha = st.checkbox("🚨 Show Only Hazardous (PHA)", value=False)
-            with fc3:
-                max_vel = st.slider("Max Velocity (km/s)", 0.0, 60.0, 60.0, 1.0)
+            f_c1, f_c2, f_c3 = st.columns([2.2, 1.4, 1.4])
+            with f_c1:
+                search_query = st.text_input("Asteroid Identifier / Name Search:", placeholder="e.g. 3683468, Apophis, 2023...")
+            with f_c2:
+                hazard_filter = st.selectbox(
+                    "Hazard Classification:",
+                    ["All Near-Earth Objects", "🚨 Hazardous PHAs Only", "🟢 Safe Objects Only"]
+                )
+            with f_c3:
+                sort_choice = st.selectbox(
+                    "Sort Records By:",
+                    [
+                        "Default (Catalog Order)",
+                        "Velocity: Fastest First",
+                        "Diameter: Largest First",
+                        "Miss Distance: Closest First",
+                        "Magnitude (H): Brightest First",
+                    ]
+                )
 
-            filtered_df = df_raw.copy()
+            with st.expander("⚙️ Advanced Numerical Range Filters (Velocity, Diameter, Distance)", expanded=False):
+                rf_c1, rf_c2, rf_c3 = st.columns(3)
+                with rf_c1:
+                    max_v_data = float(df_display["relative_velocity_km_s"].max()) if "relative_velocity_km_s" in df_display.columns else 60.0
+                    vel_range = st.slider("Velocity Range (km/s):", 0.0, float(math.ceil(max_v_data)), (0.0, float(math.ceil(max_v_data))), 0.5)
+                with rf_c2:
+                    max_d_data = float(df_display["estimated_diameter_mean_km"].max()) if "estimated_diameter_mean_km" in df_display.columns else 5.0
+                    diam_range = st.slider("Mean Diameter (km):", 0.0, float(max(1.0, math.ceil(max_d_data))), (0.0, float(max(1.0, math.ceil(max_d_data)))), 0.05)
+                with rf_c3:
+                    max_dist_data = float(df_display["miss_distance_lunar"].max()) if "miss_distance_lunar" in df_display.columns else 200.0
+                    dist_range = st.slider("Miss Distance (Lunar Distances - LD):", 0.0, float(math.ceil(max_dist_data)), (0.0, float(math.ceil(max_dist_data))), 1.0)
+
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # Apply Filters
+            filtered_df = df_display.copy()
             if search_query:
+                q = search_query.strip().lower()
                 filtered_df = filtered_df[
-                    filtered_df["name"].str.contains(search_query, case=False, na=False)
-                    | filtered_df["id"].astype(str).str.contains(search_query, na=False)
+                    filtered_df["name"].astype(str).str.lower().str.contains(q, na=False)
+                    | filtered_df["id"].astype(str).str.contains(q, na=False)
                 ]
-            if only_pha:
-                filtered_df = filtered_df[filtered_df["is_potentially_hazardous_asteroid"] == True]
+
+            if hazard_filter == "🚨 Hazardous PHAs Only":
+                filtered_df = filtered_df[filtered_df["is_potentially_hazardous_asteroid"] == 1]
+            elif hazard_filter == "🟢 Safe Objects Only":
+                filtered_df = filtered_df[filtered_df["is_potentially_hazardous_asteroid"] == 0]
+
             if "relative_velocity_km_s" in filtered_df.columns:
-                filtered_df = filtered_df[filtered_df["relative_velocity_km_s"] <= max_vel]
+                filtered_df = filtered_df[
+                    (filtered_df["relative_velocity_km_s"] >= vel_range[0])
+                    & (filtered_df["relative_velocity_km_s"] <= vel_range[1])
+                ]
 
-            st.dataframe(filtered_df, use_container_width=True, height=340)
+            if "estimated_diameter_mean_km" in filtered_df.columns:
+                filtered_df = filtered_df[
+                    (filtered_df["estimated_diameter_mean_km"] >= diam_range[0])
+                    & (filtered_df["estimated_diameter_mean_km"] <= diam_range[1])
+                ]
 
-            # Download CSV Button
-            csv_data = filtered_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="📥 Export Filtered Catalog as CSV",
-                data=csv_data,
-                file_name="neowatch_filtered_catalog.csv",
-                mime="text/csv",
-            )
+            if "miss_distance_lunar" in filtered_df.columns:
+                filtered_df = filtered_df[
+                    (filtered_df["miss_distance_lunar"] >= dist_range[0])
+                    & (filtered_df["miss_distance_lunar"] <= dist_range[1])
+                ]
 
-            # Deep Analytics Visuals (EDA from Plan 2)
-            st.markdown("#### 📊 Planetary Defense Exploratory Data Analysis (EDA)")
-            ed1, ed2 = st.columns(2)
+            # Apply Sorting
+            if sort_choice == "Velocity: Fastest First" and "relative_velocity_km_s" in filtered_df.columns:
+                filtered_df = filtered_df.sort_values(by="relative_velocity_km_s", ascending=False)
+            elif sort_choice == "Diameter: Largest First" and "estimated_diameter_mean_km" in filtered_df.columns:
+                filtered_df = filtered_df.sort_values(by="estimated_diameter_mean_km", ascending=False)
+            elif sort_choice == "Miss Distance: Closest First" and "miss_distance_lunar" in filtered_df.columns:
+                filtered_df = filtered_df.sort_values(by="miss_distance_lunar", ascending=True)
+            elif sort_choice == "Magnitude (H): Brightest First" and "absolute_magnitude_h" in filtered_df.columns:
+                filtered_df = filtered_df.sort_values(by="absolute_magnitude_h", ascending=True)
+
+            # -----------------------------------------------------------------
+            # 3. INTERACTIVE DATA TABLE & CSV EXPORT
+            # -----------------------------------------------------------------
+            tbl_c1, tbl_c2 = st.columns([3, 1])
+            with tbl_c1:
+                st.markdown(
+                    f"<div class='label-caps' style='color: #94a3b8;'>DISPLAYING {len(filtered_df):,} OF {len(df_display):,} HISTORICAL ASTEROID RECORDS</div>",
+                    unsafe_allow_html=True,
+                )
+            with tbl_c2:
+                csv_data = filtered_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📥 Export Filtered CSV",
+                    data=csv_data,
+                    file_name=f"neowatch_catalog_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+
+            # Select and order key columns for clean viewing
+            display_cols = [
+                c for c in [
+                    "id",
+                    "name",
+                    "absolute_magnitude_h",
+                    "estimated_diameter_min_km",
+                    "estimated_diameter_max_km",
+                    "estimated_diameter_mean_km",
+                    "relative_velocity_km_s",
+                    "miss_distance_km",
+                    "miss_distance_lunar",
+                    "close_approach_date",
+                    "is_potentially_hazardous_asteroid",
+                ] if c in filtered_df.columns
+            ]
+            st.dataframe(filtered_df[display_cols], use_container_width=True, height=360)
+
+            # -----------------------------------------------------------------
+            # 4. SINGLE ASTEROID DEEP INSPECTOR & ML SCORING HUD
+            # -----------------------------------------------------------------
+            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+            if not filtered_df.empty:
+                st.markdown(
+                    """
+                    <div class='glass-container' style='padding: 14px 18px; margin-bottom: 14px;'>
+                        <div class='label-caps' style='color: #c084fc; margin-bottom: 6px;'>🎯 TARGET ASTEROID TELEMETRY INSPECTOR</div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                asteroid_names = filtered_df["name"].tolist()
+                selected_name = st.selectbox("Select Asteroid from Filtered Set to Inspect Orbital Telemetry:", asteroid_names, index=0)
+                selected_row = filtered_df[filtered_df["name"] == selected_name].iloc[0]
+
+                ins_c1, ins_c2, ins_c3, ins_c4 = st.columns(4)
+                with ins_c1:
+                    st.markdown(
+                        f"""
+                        <div class='purple-card'>
+                            <div class='label-caps'>IDENTIFIER</div>
+                            <div class='val-mono' style='font-size: 16px; color: #38bdf8;'>{selected_row.get("name", "N/A")}</div>
+                            <div class='val-sub'>NASA ID: {selected_row.get("id", "N/A")}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with ins_c2:
+                    h_val = float(selected_row.get("absolute_magnitude_h", 0.0))
+                    d_mean = float(selected_row.get("estimated_diameter_mean_km", 0.0))
+                    st.markdown(
+                        f"""
+                        <div class='purple-card'>
+                            <div class='label-caps'>OPTICS & DIAMETER</div>
+                            <div class='val-mono' style='font-size: 16px; color: #fbbf24;'>{d_mean*1000:,.0f} <span style='font-size: 11px;'>m</span></div>
+                            <div class='val-sub'>Magnitude H: {h_val:.2f}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with ins_c3:
+                    vel_val = float(selected_row.get("relative_velocity_km_s", 0.0))
+                    dist_ld = float(selected_row.get("miss_distance_lunar", 0.0))
+                    st.markdown(
+                        f"""
+                        <div class='purple-card'>
+                            <div class='label-caps'>KINEMATICS</div>
+                            <div class='val-mono' style='font-size: 16px; color: #34d399;'>{vel_val:.2f} <span style='font-size: 11px;'>km/s</span></div>
+                            <div class='val-sub'>{dist_ld:.1f} LD ({float(selected_row.get("miss_distance_km", 0.0)):,.0f} km)</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with ins_c4:
+                    is_pha_val = int(selected_row.get("is_potentially_hazardous_asteroid", 0))
+                    status_color = "#f87171" if is_pha_val == 1 else "#34d399"
+                    status_label = "HAZARDOUS (PHA)" if is_pha_val == 1 else "SAFE OBJECT"
+                    st.markdown(
+                        f"""
+                        <div class='purple-card'>
+                            <div class='label-caps'>GROUND TRUTH STATUS</div>
+                            <div class='val-mono' style='font-size: 16px; color: {status_color};'>{status_label}</div>
+                            <div class='val-sub'>Approach: {selected_row.get("close_approach_date", "N/A")}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            # -----------------------------------------------------------------
+            # 5. COMPREHENSIVE EXPLORATORY DATA ANALYSIS (EDA) SUITE
+            # -----------------------------------------------------------------
+            st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+            st.markdown("#### 📊 Planetary Defense Deep Exploratory Data Analysis (EDA)")
+            st.caption("Multi-variable statistical distributions, risk correlations, and temporal approach patterns.")
+
             theme = get_plotly_theme()
-            with ed1:
-                if "estimated_diameter_mean_km" in df_raw.columns:
+
+            # EDA ROW 1: Donut Chart & Magnitude vs Diameter
+            eda_r1_c1, eda_r1_c2 = st.columns(2)
+            with eda_r1_c1:
+                pha_dist = df_display["is_potentially_hazardous_asteroid"].value_counts()
+                labels_map = {1: "Hazardous PHA (1)", 0: "Safe NEO (0)"}
+                fig_donut = px.pie(
+                    names=[labels_map.get(k, str(k)) for k in pha_dist.index],
+                    values=pha_dist.values,
+                    hole=0.55,
+                    color=[labels_map.get(k, str(k)) for k in pha_dist.index],
+                    color_discrete_map={"Hazardous PHA (1)": "#ef4444", "Safe NEO (0)": "#38bdf8"},
+                    title="NEO Threat Classification Ratio",
+                )
+                fig_donut.update_traces(textposition="inside", textinfo="percent+label")
+                fig_donut.update_layout(
+                    plot_bgcolor=theme["plot_bgcolor"],
+                    paper_bgcolor=theme["paper_bgcolor"],
+                    font=theme["font"],
+                    height=340,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_donut, use_container_width=True)
+
+            with eda_r1_c2:
+                if "absolute_magnitude_h" in df_display.columns and "estimated_diameter_mean_km" in df_display.columns:
+                    h_curve = np.linspace(
+                        float(df_display["absolute_magnitude_h"].min()),
+                        float(df_display["absolute_magnitude_h"].max()),
+                        100
+                    )
+                    d_dark = (1329 / math.sqrt(0.05)) * (10 ** (-0.2 * h_curve))
+                    d_bright = (1329 / math.sqrt(0.25)) * (10 ** (-0.2 * h_curve))
+
+                    fig_mag = px.scatter(
+                        df_display,
+                        x="absolute_magnitude_h",
+                        y="estimated_diameter_mean_km",
+                        color=df_display["is_potentially_hazardous_asteroid"].map({1: "Hazardous (PHA)", 0: "Safe (0)"}),
+                        color_discrete_map={"Hazardous (PHA)": "#ef4444", "Safe (0)": "#38bdf8"},
+                        log_y=True,
+                        title="Absolute Magnitude (H) vs Mean Diameter (km) with Albedo Bounds",
+                        labels={"absolute_magnitude_h": "Absolute Magnitude (H)", "estimated_diameter_mean_km": "Mean Diameter (km, log)"},
+                        hover_data=["name"] if "name" in df_display.columns else None,
+                    )
+                    fig_mag.add_trace(
+                        go.Scatter(x=h_curve, y=d_dark, mode="lines", name="Albedo pv=0.05 (Dark)", line=dict(color="#fbbf24", dash="dash", width=1.5))
+                    )
+                    fig_mag.add_trace(
+                        go.Scatter(x=h_curve, y=d_bright, mode="lines", name="Albedo pv=0.25 (Bright)", line=dict(color="#34d399", dash="dot", width=1.5))
+                    )
+                    fig_mag.update_layout(
+                        plot_bgcolor=theme["plot_bgcolor"],
+                        paper_bgcolor=theme["paper_bgcolor"],
+                        font=theme["font"],
+                        height=340,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
+                    )
+                    st.plotly_chart(fig_mag, use_container_width=True)
+
+            # EDA ROW 2: Velocity vs Miss Distance Risk Matrix & Correlation Heatmap
+            eda_r2_c1, eda_r2_c2 = st.columns(2)
+            with eda_r2_c1:
+                if "miss_distance_lunar" in df_display.columns and "relative_velocity_km_s" in df_display.columns:
+                    fig_risk = px.scatter(
+                        df_display,
+                        x="miss_distance_lunar",
+                        y="relative_velocity_km_s",
+                        size="estimated_diameter_mean_km" if "estimated_diameter_mean_km" in df_display.columns else None,
+                        color=df_display["is_potentially_hazardous_asteroid"].map({1: "Hazardous (PHA)", 0: "Safe (0)"}),
+                        color_discrete_map={"Hazardous (PHA)": "#ef4444", "Safe (0)": "#38bdf8"},
+                        title="Planetary Risk Matrix: Velocity vs Miss Distance (LD)",
+                        labels={"miss_distance_lunar": "Miss Distance (Lunar Distances - LD)", "relative_velocity_km_s": "Relative Velocity (km/s)"},
+                        hover_data=["name"] if "name" in df_display.columns else None,
+                    )
+                    # Add lunar threshold guideline (0.05 AU = 19.5 LD)
+                    fig_risk.add_vline(x=19.5, line_width=1.5, line_dash="dash", line_color="#f87171", annotation_text="PHA Threshold (19.5 LD / 0.05 AU)", annotation_position="top right")
+                    fig_risk.update_layout(
+                        plot_bgcolor=theme["plot_bgcolor"],
+                        paper_bgcolor=theme["paper_bgcolor"],
+                        font=theme["font"],
+                        height=340,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
+                    )
+                    st.plotly_chart(fig_risk, use_container_width=True)
+
+            with eda_r2_c2:
+                numeric_features = [
+                    c for c in [
+                        "absolute_magnitude_h",
+                        "estimated_diameter_mean_km",
+                        "relative_velocity_km_s",
+                        "miss_distance_km",
+                        "is_potentially_hazardous_asteroid"
+                    ] if c in df_display.columns
+                ]
+                if len(numeric_features) >= 3:
+                    corr_mat = df_display[numeric_features].corr()
+                    clean_labels = [
+                        "Magnitude (H)",
+                        "Diameter (km)",
+                        "Velocity (km/s)",
+                        "Miss Dist (km)",
+                        "Hazard Status"
+                    ][:len(numeric_features)]
+                    fig_corr = px.imshow(
+                        corr_mat,
+                        x=clean_labels,
+                        y=clean_labels,
+                        text_auto=".2f",
+                        color_continuous_scale="RdBu_r",
+                        zmin=-1,
+                        zmax=1,
+                        title="Feature Correlation Matrix (Pearson r)",
+                    )
+                    fig_corr.update_layout(
+                        plot_bgcolor=theme["plot_bgcolor"],
+                        paper_bgcolor=theme["paper_bgcolor"],
+                        font=theme["font"],
+                        height=340,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                    )
+                    st.plotly_chart(fig_corr, use_container_width=True)
+
+            # EDA ROW 3: Diameter Outlier Boxplot & Velocity Distribution Histogram
+            eda_r3_c1, eda_r3_c2 = st.columns(2)
+            with eda_r3_c1:
+                if "estimated_diameter_mean_km" in df_display.columns:
                     fig_box = px.box(
-                        df_raw,
+                        df_display,
                         x="is_potentially_hazardous_asteroid",
                         y="estimated_diameter_mean_km",
-                        color="is_potentially_hazardous_asteroid",
-                        color_discrete_map={True: "#ef4444", False: "#38bdf8"},
+                        color=df_display["is_potentially_hazardous_asteroid"].map({1: "Hazardous (PHA)", 0: "Safe (0)"}),
+                        color_discrete_map={"Hazardous (PHA)": "#ef4444", "Safe (0)": "#38bdf8"},
                         labels={
-                            "is_potentially_hazardous_asteroid": "Is Hazardous (PHA)",
+                            "is_potentially_hazardous_asteroid": "Hazard Class",
                             "estimated_diameter_mean_km": "Estimated Mean Diameter (km)",
                         },
-                        title="Diameter Outlier Boxplot (IQR Capping Target)",
+                        title="Impactor Diameter Dispersion & Outlier Bounds (IQR Capping)",
                     )
                     fig_box.update_layout(
                         plot_bgcolor=theme["plot_bgcolor"],
@@ -2300,27 +2681,60 @@ def main():
                     )
                     st.plotly_chart(fig_box, use_container_width=True)
 
-            with ed2:
-                if "absolute_magnitude_h" in df_raw.columns:
-                    fig_hist = px.histogram(
-                        df_raw,
-                        x="absolute_magnitude_h",
-                        color="is_potentially_hazardous_asteroid",
-                        color_discrete_map={True: "#ef4444", False: "#38bdf8"},
-                        labels={"absolute_magnitude_h": "Absolute Magnitude (H)"},
-                        title="Absolute Magnitude Distribution (H-Value)",
+            with eda_r3_c2:
+                if "relative_velocity_km_s" in df_display.columns:
+                    fig_vel_hist = px.histogram(
+                        df_display,
+                        x="relative_velocity_km_s",
+                        color=df_display["is_potentially_hazardous_asteroid"].map({1: "Hazardous (PHA)", 0: "Safe (0)"}),
+                        color_discrete_map={"Hazardous (PHA)": "#ef4444", "Safe (0)": "#38bdf8"},
+                        barmode="overlay",
+                        opacity=0.75,
+                        nbins=35,
+                        labels={"relative_velocity_km_s": "Relative Velocity (km/s)"},
+                        title="Impactor Velocity Distribution by Hazard Class",
                     )
-                    fig_hist.update_layout(
+                    fig_vel_hist.update_layout(
                         plot_bgcolor=theme["plot_bgcolor"],
                         paper_bgcolor=theme["paper_bgcolor"],
                         font=theme["font"],
                         height=320,
-                        margin=dict(l=20, r=20, t=40, b=50),
-                        legend=dict(orientation="h", yanchor="top", y=-0.20, xanchor="center", x=0.5),
+                        margin=dict(l=20, r=20, t=35, b=40),
+                        legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5),
                     )
-                    st.plotly_chart(fig_hist, use_container_width=True)
-        else:
-            st.warning("Historical dataset not found. Please run data collection pipeline.")
+                    st.plotly_chart(fig_vel_hist, use_container_width=True)
+
+            # EDA ROW 4: Historical Close Approach Timeline & Monthly Encounter Trends
+            if "close_approach_date" in df_display.columns:
+                try:
+                    df_time = df_display.copy()
+                    df_time["close_approach_date"] = pd.to_datetime(df_time["close_approach_date"], errors="coerce")
+                    df_time = df_time.dropna(subset=["close_approach_date"])
+                    if not df_time.empty:
+                        df_time["year_month"] = df_time["close_approach_date"].dt.to_period("M").astype(str)
+                        timeline_df = df_time.groupby(["year_month", "is_potentially_hazardous_asteroid"]).size().reset_index(name="count")
+                        timeline_df["Hazard_Label"] = timeline_df["is_potentially_hazardous_asteroid"].map({1: "Hazardous (PHA)", 0: "Safe (0)"})
+
+                        fig_timeline = px.bar(
+                            timeline_df,
+                            x="year_month",
+                            y="count",
+                            color="Hazard_Label",
+                            color_discrete_map={"Hazardous (PHA)": "#ef4444", "Safe (0)": "#38bdf8"},
+                            title="📅 Temporal Encounter Timeline: Monthly Close Approaches & Hazard Frequency",
+                            labels={"year_month": "Observation Period (Year-Month)", "count": "Asteroid Flybys"},
+                        )
+                        fig_timeline.update_layout(
+                            plot_bgcolor=theme["plot_bgcolor"],
+                            paper_bgcolor=theme["paper_bgcolor"],
+                            font=theme["font"],
+                            height=330,
+                            margin=dict(l=20, r=20, t=40, b=30),
+                            legend=dict(orientation="h", yanchor="top", y=-0.22, xanchor="center", x=0.5),
+                        )
+                        st.plotly_chart(fig_timeline, use_container_width=True)
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":
