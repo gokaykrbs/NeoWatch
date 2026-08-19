@@ -1,17 +1,18 @@
 @echo off
+cd /d "%~dp0"
 echo ===================================================
 echo       NeoWatch-OS Dashboard Baslatiliyor...
 echo ===================================================
 
-REM Sanal ortam kontrolu
-if exist .venv\Scripts\activate.bat (
-    call .venv\Scripts\activate.bat
-) else if exist venv\Scripts\activate.bat (
-    call venv\Scripts\activate.bat
+if exist ".venv\Scripts\python.exe" (
+    echo Python sanal ortami (.venv) kullaniliyor...
+    ".venv\Scripts\python.exe" -m streamlit run app.py
+) else if exist "venv\Scripts\python.exe" (
+    echo Python sanal ortami (venv) kullaniliyor...
+    "venv\Scripts\python.exe" -m streamlit run app.py
+) else (
+    echo Global Python ile baslatiliyor...
+    python -m streamlit run app.py
 )
-
-REM Gerekli paketleri kontrol et ve Streamlit'i baslat
-echo Streamlit uygulamasi baslatiliyor...
-streamlit run app.py
 
 pause
